@@ -1,8 +1,10 @@
 const express = require('express');
 const mongoose = require('mongoose');
+const fileUpload = require('express-fileupload');
 const ejs = require('ejs');
 const path = require('path');
-const Photo = require('./models/Photo')
+const fs = require('fs');
+const Photo = require('./models/Photo');
 
 const app = express();
 
@@ -13,7 +15,7 @@ mongoose.connect('mongodb://localhost/pcat-test-db', {
 });
 
 // TEMPLATE ENGINE
-app.set("view engine","ejs") // template engine olarak ejs kullanacağımızı söylüyoruz
+app.set('view engine', 'ejs'); // template engine olarak ejs kullanacağımızı söylüyoruz
 
 // const myLogger = (req, res, next) => {
 //   console.log('Middleware log 1');
@@ -22,42 +24,62 @@ app.set("view engine","ejs") // template engine olarak ejs kullanacağımızı s
 
 //MIDDLEWARES
 app.use(express.static('public'));
-app.use(express.urlencoded({extended:true})); // urldeki datayı okumamızı sağlıyor
+app.use(express.urlencoded({ extended: true })); // urldeki datayı okumamızı sağlıyor
 app.use(express.json()); // urldeki datayı jsona döndürmemizi sağlıyor
+app.use(fileUpload());
 // app.use(myLogger);
 
 //ROUTES
 app.get('/', async (req, res) => {
-  const photos = await Photo.find({}); // fotoları yakaladık
+  const photos = await Photo.find({}).sort('-dateCreated'); // fotoları yakaladık
   //res.sendFile(path.resolve(__dirname, 'temp/index.html')); // dosya gönderme şekli
-  res.render('index',{
-    photos: photos
-  })
+  res.render('index', {
+    photos: photos,
+  });
 });
 
-app.get('/photos/:id', async (req,res)=> {
+app.get('/photos/:id', async (req, res) => {
   //console.dir(req.params.id)
   //res.render('about')
-  const photo = await Photo.findById(req.params.id)
-  res.render('photo',{
-    photo: photo
-  })
-})
+  const photo = await Photo.findById(req.params.id);
+  res.render('photo', {
+    photo: photo,
+  });
+});
 
+app.get('/about', (req, res) => {
+  res.render('about');
+});
 
-app.get('/about', (req,res)=> {
-  res.render('about')
-})
+app.get('/add', (req, res) => {
+  res.render('add');
+});
 
-app.get('/add', (req,res)=> {
-  res.render('add')
-})
+app.post('/photos', async (req, res) => {
+  // console.log(req.files.image); // Gönderdiğimiz görsellerle ilgili verilere ulaşılırız
 
-app.post('/photos', async (req,res)=> {
-  await Photo.create(req.body);
-  //console.log(req.body);
-  res.redirect('/') // bitince anasayfaya gitmesini istiyoruz
-})
+  // await Photo.create(req.body);
+  // console.log(req.body); // Gönderdiğimiz string verilere ulaşırız
+  // res.redirect('/'); // bitince anasayfaya gitmesini istiyoruz
+
+  const uploadDir = 'public/uploads';
+
+  // eğer dosya yoksa... senkron olmasında ki sebep ilk bunun yapılması lazım
+  if (!fs.existsSync(uploadDir)) {
+    fs.mkdirSync(uploadDir);
+  }
+
+  let uploadedImage = req.files.image;
+  let uploadPath = __dirname + '/public/uploads/' + uploadedImage.name;
+
+  uploadedImage.mv(uploadPath, async () => {
+    await Photo.create({
+      ...req.body,
+      image: '/uploads/' + uploadedImage.name,
+    });
+    res.redirect('/');
+  });
+});
 
 const port = 3000;
 
